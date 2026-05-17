@@ -29,7 +29,7 @@ A Spring Boot REST API for automated tracking of Warcraft III DotA performance s
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/youruser/chalettaperformance.git
+git clone https://github.com/Christian-Fahed/chalettaperformance.git
 cd chalettaperformance
 ```
 
