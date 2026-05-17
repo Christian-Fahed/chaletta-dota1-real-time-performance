@@ -37,7 +37,7 @@ The project was built to give a small group of players a dedicated space to trac
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Christian-Fahed/chalettaperformance.git
+git clone https://github.com/Christian-Fahed/chaletta-dota1-real-time-performance.git
 cd chalettaperformance
 ```
 
