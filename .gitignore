@@ -1,0 +1,22 @@
+# Maven
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.DS_Store
+
+# Spring Boot sensitive config
+application-production.properties
+application-local.properties
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env

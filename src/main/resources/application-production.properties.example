@@ -1,0 +1,32 @@
+spring.application.name=chalettaperformancedb
+
+# ─── Database ───────────────────────────────────────────
+spring.datasource.url=jdbc:mysql://localhost:3306/YOUR_DB_NAME
+spring.datasource.username=YOUR_DB_USERNAME
+spring.datasource.password=YOUR_DB_PASSWORD
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+# ─── JPA ────────────────────────────────────────────────
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+
+# ─── Spring MVC ─────────────────────────────────────────
+spring.mvc.dispatch-options-request=true
+
+# ─── JWT ────────────────────────────────────────────────
+jwt.secret=YOUR_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG
+jwt.expiration=86400000
+
+# ─── CORS ───────────────────────────────────────────────
+app.cors.allowed-origins=https://YOURDOMAIN.COM
+
+# ─── Default Admin User ─────────────────────────────────
+app.default-user.username=YOUR_ADMIN_USERNAME
+app.default-user.password=YOUR_ADMIN_PASSWORD
+app.default-user.role=ROLE_ADMIN
+
+# ─── RGC API ────────────────────────────────────────────
+app.rgc.api-url=https://ladder.rankedgaming.com/views/g4/ajax-games.php
+app.rgc.room=YOUR_ROOM_ID
+app.rgc.step=30
