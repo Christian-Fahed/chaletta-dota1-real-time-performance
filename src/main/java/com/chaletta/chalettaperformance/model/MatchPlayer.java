@@ -29,6 +29,9 @@ public class MatchPlayer {
     @Column(name = "team_side")
     private Integer teamSide;
 
+    @Column(name = "team_number")
+    private Integer teamNumber;
+
     private Integer kills;
     private Integer deaths;
     private Integer assists;

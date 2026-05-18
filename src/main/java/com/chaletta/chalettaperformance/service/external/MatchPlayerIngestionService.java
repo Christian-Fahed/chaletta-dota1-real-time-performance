@@ -37,6 +37,7 @@ public class MatchPlayerIngestionService {
         mp.setMatch(match);
         mp.setPlayer(player);
         mp.setTeamSide(playerNode.get("sid").asInt());
+        mp.setTeamNumber(playerNode.get("sid").asInt() <= 4 ? 0 : 1);
         mp.setHeroName(hero.get("name").asText());
         mp.setHeroClass(hero.get("class").asText());
         mp.setKills(stats.get("a").asInt());

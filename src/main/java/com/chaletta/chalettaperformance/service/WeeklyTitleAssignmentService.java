@@ -115,9 +115,9 @@ public class WeeklyTitleAssignmentService {
             case "games_played_SUM",
                  "games_played_MAX"  -> matchPlayerRepository.gamesPlayedPerPlayer(from, to);
             case "wins_SUM",
-                 "wins_MAX"          -> matchPlayerRepository.winsPerPlayer(from, to);
+                 "wins_MAX" -> matchPlayerRepository.winsPerPlayer(from, to);
             case "losses_SUM",
-                 "losses_MAX"        -> matchPlayerRepository.lossesPerPlayer(from, to);
+                 "losses_MAX" -> matchPlayerRepository.lossesPerPlayer(from, to);
             default -> {
                 log.warn("Unknown metric/aggregation combo: {}", key);
                 yield null;
