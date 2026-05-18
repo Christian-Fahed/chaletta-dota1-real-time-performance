@@ -32,6 +32,9 @@ public class MatchPlayer {
     @Column(name = "team_number")
     private Integer teamNumber;
 
+    @Column(name = "player_status")
+    private Integer playerStatus; // 1 = won, 2 = lost, 5 = abandoned
+
     private Integer kills;
     private Integer deaths;
     private Integer assists;

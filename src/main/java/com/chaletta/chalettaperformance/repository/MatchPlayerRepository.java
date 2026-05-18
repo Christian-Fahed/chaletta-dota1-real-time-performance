@@ -66,15 +66,6 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
     List<Object[]> overallStatsPerPlayer();
 
     /**
-     * Wins per player overall using teamNumber vs teamWinnerSide.
-     * Returns: playerId, winCount
-     */
-    @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE mp.teamNumber = m.teamWinnerSide " +
-            "GROUP BY mp.player.playerId")
-    List<Object[]> winsPerPlayerOverall();
-
-    /**
      * Most played hero per player, ordered by count descending.
      * Returns: playerId, heroName, count
      */
@@ -94,16 +85,6 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "WHERE m.startedAt BETWEEN :from AND :to " +
             "GROUP BY mp.player.playerId, mp.player.username")
     List<Object[]> statsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
-
-    /**
-     * Wins per player within a date range using teamNumber.
-     * Returns: playerId, winCount
-     */
-    @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
-            "AND mp.teamNumber = m.teamWinnerSide " +
-            "GROUP BY mp.player.playerId")
-    List<Object[]> winsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
 
     /**
      * Games played per player within a date range.
@@ -173,26 +154,6 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
     List<Object[]> gamesPlayedPerPlayer(@Param("from") Long from, @Param("to") Long to);
 
-    /**
-     * Wins per player in range using teamNumber vs teamWinnerSide.
-     * Returns: player, winCount
-     */
-    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
-            "AND mp.teamNumber = m.teamWinnerSide " +
-            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
-    List<Object[]> winsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    /**
-     * Losses per player in range using teamNumber vs teamWinnerSide.
-     * Returns: player, lossCount
-     */
-    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
-            "AND mp.teamNumber != m.teamWinnerSide " +
-            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
-    List<Object[]> lossesPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
     // ─── Hero Stats ──────────────────────────────────────────────────────────
 
     /**
@@ -203,14 +164,6 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "FROM MatchPlayer mp GROUP BY mp.heroName, mp.heroClass ORDER BY COUNT(mp) DESC")
     List<Object[]> heroStatsOverall();
 
-    /**
-     * Hero win counts using teamNumber vs teamWinnerSide.
-     * Returns: heroName, winCount
-     */
-    @Query("SELECT mp.heroName, COUNT(mp) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE mp.teamNumber = m.teamWinnerSide " +
-            "GROUP BY mp.heroName")
-    List<Object[]> heroWins();
 
     /**
      * Hero stats per player combination.
@@ -233,4 +186,37 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.heroName, mp.heroClass " +
             "ORDER BY COUNT(mp) DESC")
     List<Object[]> heroStatsByPlayer(@Param("username") String username);
+
+    // Wins — status = 1
+    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
+            "AND mp.playerStatus = 1 " +
+            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
+    List<Object[]> winsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    // Losses — status = 2
+    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
+            "AND mp.playerStatus = 2 " +
+            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
+    List<Object[]> lossesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    // Wins overall
+    @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
+            "WHERE mp.playerStatus = 1 " +
+            "GROUP BY mp.player.playerId")
+    List<Object[]> winsPerPlayerOverall();
+
+    // Wins in range
+    @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
+            "AND mp.playerStatus = 1 " +
+            "GROUP BY mp.player.playerId")
+    List<Object[]> winsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
+
+    // Hero wins
+    @Query("SELECT mp.heroName, COUNT(mp) FROM MatchPlayer mp " +
+            "WHERE mp.playerStatus = 1 " +
+            "GROUP BY mp.heroName")
+    List<Object[]> heroWins();
 }
