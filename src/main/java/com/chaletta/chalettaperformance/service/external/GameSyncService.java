@@ -16,15 +16,21 @@ import java.time.ZoneOffset;
 @Slf4j
 public class GameSyncService {
 
-    private final ExternalApiClient apiClient;
-    private final MatchIngestionService matchIngestionService;
-    private final PlayerIngestionService playerIngestionService;
-    private final MatchPlayerIngestionService matchPlayerIngestionService;
+    private static final int MIN_DURATION_SECONDS = 1200; // 20 minutes
+
+    private final ExternalApiClient              apiClient;
+    private final MatchIngestionService          matchIngestionService;
+    private final PlayerIngestionService         playerIngestionService;
+    private final MatchPlayerIngestionService    matchPlayerIngestionService;
 
     /**
      * Sync games with the RGC API.
-     * Only stores games from the current year, with 6+ players,
-     * and stops when a known game or a game from a previous year is encountered.
+     * Only stores games that meet ALL of the following:
+     * - Played in the current year
+     * - Duration >= 20 minutes (1200 seconds)
+     * - At least 6 players
+     * - At least one registered player
+     * Stops when a known game or a game from a previous year is encountered.
      */
     public void sync() {
         try {
@@ -48,7 +54,7 @@ public class GameSyncService {
                 for (JsonNode gameNode : games) {
                     JsonNode info    = gameNode.get("info");
                     JsonNode players = gameNode.get("player");
-                    Long gameId      = info.get("ID").asLong();
+                    Long     gameId  = info.get("ID").asLong();
 
                     // Stop if game already exists in DB
                     if (matchIngestionService.matchExists(gameId)) {
@@ -69,6 +75,14 @@ public class GameSyncService {
                         break;
                     }
 
+                    // Skip games shorter than 20 minutes
+                    long duration = info.get("time").asLong();
+                    if (duration < MIN_DURATION_SECONDS) {
+                        log.info("Game {} duration {}s is under {} minutes, skipping.",
+                                gameId, duration, MIN_DURATION_SECONDS / 60);
+                        continue;
+                    }
+
                     // Skip games with less than 6 players
                     if (players == null || players.size() < 6) {
                         log.info("Game {} has less than 6 players, skipping.", gameId);
@@ -83,12 +97,13 @@ public class GameSyncService {
 
                     // Save the match
                     Match match = matchIngestionService.createMatch(gameId, info);
-                    log.info("Saved match {}", gameId);
+                    log.info("Saved match {} ({}m {}s).",
+                            gameId, duration / 60, duration % 60);
 
                     // Save each known player's match entry
                     players.fields().forEachRemaining(entry -> {
                         JsonNode playerNode = entry.getValue();
-                        Player player = playerIngestionService.resolvePlayer(playerNode);
+                        Player   player     = playerIngestionService.resolvePlayer(playerNode);
 
                         if (player == null) {
                             log.debug("Unknown player uid={}, skipping.",

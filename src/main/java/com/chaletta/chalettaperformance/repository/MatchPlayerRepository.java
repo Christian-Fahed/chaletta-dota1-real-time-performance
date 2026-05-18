@@ -16,12 +16,20 @@ import java.util.Optional;
  * <p>Repository for managing match player entries and aggregating
  * performance statistics across matches.</p>
  *
- * <p>Win/Loss logic uses {@code teamNumber} (0 = Sentinel, 1 = Scourge)
- * compared against {@code match.teamWinnerSide} for correctness.
- * {@code teamSide} is a slot number (0–9) and must NOT be used for win/loss.</p>
+ * <h2>Stat inclusion rules:</h2>
+ * <ul>
+ *   <li>status = 1 (won)       → always counts for stats, counted as WIN</li>
+ *   <li>status = 2 (lost)      → always counts for stats, counted as LOSS</li>
+ *   <li>status = 5 (abandoned) → counts for stats ONLY if game duration > 1200s (20 min), NOT a win or loss</li>
+ * </ul>
+ *
+ * <p>Only scored matches (match.status = 1) are included in any stat query.</p>
  */
 @Repository
 public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> {
+
+    // ─── Stat Inclusion Condition (used in every stats query) ────────────────
+    // (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200))
 
     // ─── Basic Lookups ───────────────────────────────────────────────────────
 
@@ -43,67 +51,93 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
     // ─── Global Stats ────────────────────────────────────────────────────────
 
     /**
-     * Global kills, deaths, assists across all matches.
+     * Global kills, deaths, assists across all scored matches.
+     * Includes abandoned players if game > 20 minutes.
      */
-    @Query("SELECT SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) FROM MatchPlayer mp")
+    @Query("SELECT SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
+            "FROM MatchPlayer mp JOIN mp.match m " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200))")
     List<Object[]> globalKDA();
 
     /**
      * Most played heroes overall, ordered by play count descending.
+     * Includes abandoned players if game > 20 minutes.
      */
     @Query("SELECT mp.heroName, COUNT(mp) as cnt FROM MatchPlayer mp " +
+            "JOIN mp.match m " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "GROUP BY mp.heroName ORDER BY cnt DESC")
     List<Object[]> mostPlayedHeroes(Pageable pageable);
 
     // ─── Per Player — Overall ────────────────────────────────────────────────
 
-
-
     /**
-     * Most played hero per player, ordered by count descending.
-     * Returns: playerId, heroName, count
+     * Overall stats per player across all scored matches.
+     * Includes abandoned players if game > 20 minutes.
+     * Returns: playerId, username, games, kills, deaths, assists
      */
-    @Query("SELECT mp.player.playerId, mp.heroName, COUNT(mp) as cnt FROM MatchPlayer mp " +
-            "GROUP BY mp.player.playerId, mp.heroName ORDER BY cnt DESC")
-    List<Object[]> heroPlayCountPerPlayer();
-
-    // ─── Per Player — Date Range ─────────────────────────────────────────────
-
-
-
-    // ─── Hero Stats ──────────────────────────────────────────────────────────
-
-
-    // Overall stats — only scored matches
     @Query("SELECT mp.player.playerId, mp.player.username, " +
             "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
-            "WHERE m.status = 1 AND mp.playerStatus IN (1, 2) " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "GROUP BY mp.player.playerId, mp.player.username")
     List<Object[]> overallStatsPerPlayer();
 
-    // Overall stats in date range — only scored matches
-    @Query("SELECT mp.player.playerId, mp.player.username, " +
-            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
-            "FROM MatchPlayer mp JOIN mp.match m " +
-            "WHERE m.status = 1 AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player.playerId, mp.player.username")
-    List<Object[]> statsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
-
-    // Wins overall — scored only
+    /**
+     * Wins per player overall.
+     * Only status = 1 counts as a win. Abandoned never wins.
+     * Returns: playerId, winCount
+     */
     @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 AND mp.playerStatus = 1 " +
             "GROUP BY mp.player.playerId")
     List<Object[]> winsPerPlayerOverall();
 
-    // Losses overall — scored only
+    /**
+     * Losses per player overall.
+     * Only status = 2 counts as a loss. Abandoned never loses.
+     * Returns: playerId, lossCount
+     */
     @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 AND mp.playerStatus = 2 " +
             "GROUP BY mp.player.playerId")
     List<Object[]> lossesPerPlayerOverall();
 
-    // Wins in range — scored only
+    /**
+     * Most played hero per player, ordered by count descending.
+     * Includes abandoned players if game > 20 minutes.
+     * Returns: playerId, heroName, count
+     */
+    @Query("SELECT mp.player.playerId, mp.heroName, COUNT(mp) as cnt FROM MatchPlayer mp " +
+            "JOIN mp.match m " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "GROUP BY mp.player.playerId, mp.heroName ORDER BY cnt DESC")
+    List<Object[]> heroPlayCountPerPlayer();
+
+    // ─── Per Player — Date Range ─────────────────────────────────────────────
+
+    /**
+     * Stats per player within a Unix timestamp range.
+     * Includes abandoned players if game > 20 minutes.
+     * Returns: playerId, username, games, kills, deaths, assists
+     */
+    @Query("SELECT mp.player.playerId, mp.player.username, " +
+            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
+            "FROM MatchPlayer mp JOIN mp.match m " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player.playerId, mp.player.username")
+    List<Object[]> statsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
+
+    /**
+     * Wins per player in date range. Only status = 1.
+     * Returns: playerId, winCount
+     */
     @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
             "AND mp.playerStatus = 1 " +
@@ -111,7 +145,10 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player.playerId")
     List<Object[]> winsPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
 
-    // Losses in range — scored only
+    /**
+     * Losses per player in date range. Only status = 2.
+     * Returns: playerId, lossCount
+     */
     @Query("SELECT mp.player.playerId, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
             "AND mp.playerStatus = 2 " +
@@ -119,7 +156,36 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player.playerId")
     List<Object[]> lossesPerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
 
-    // Wins for weekly titles — scored only
+    /**
+     * Count games played per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     * Returns: player, count
+     */
+    @Query("SELECT mp.player, COUNT(mp) as cnt FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player")
+    List<Object[]> countGamesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    /**
+     * Games played per player in date range, ordered descending.
+     * Includes abandoned if game > 20 minutes.
+     * Returns: player, count
+     */
+    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
+    List<Object[]> gamesPlayedPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    // ─── Weekly Title Metrics ─────────────────────────────────────────────────
+
+    /**
+     * Wins per player in date range for weekly title assignment.
+     * Only status = 1. Returns: player, winCount
+     */
     @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
             "AND mp.playerStatus = 1 " +
@@ -127,7 +193,10 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
     List<Object[]> winsPerPlayer(@Param("from") Long from, @Param("to") Long to);
 
-    // Losses for weekly titles — scored only
+    /**
+     * Losses per player in date range for weekly title assignment.
+     * Only status = 2. Returns: player, lossCount
+     */
     @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
             "AND mp.playerStatus = 2 " +
@@ -135,93 +204,120 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
     List<Object[]> lossesPerPlayer(@Param("from") Long from, @Param("to") Long to);
 
-    // Count games played — scored only
-    @Query("SELECT mp.player, COUNT(mp) as cnt FROM MatchPlayer mp " +
+    /**
+     * Sum of kills per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, SUM(mp.kills) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player")
-    List<Object[]> countGamesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+            "GROUP BY mp.player ORDER BY SUM(mp.kills) DESC")
+    List<Object[]> sumKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
 
-    // Games played per player in range — scored only
-    @Query("SELECT mp.player, COUNT(mp) FROM MatchPlayer mp " +
+    /**
+     * Sum of deaths per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, SUM(mp.deaths) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY COUNT(mp) DESC")
-    List<Object[]> gamesPlayedPerPlayer(@Param("from") Long from, @Param("to") Long to);
+            "GROUP BY mp.player ORDER BY SUM(mp.deaths) DESC")
+    List<Object[]> sumDeathsPerPlayer(@Param("from") Long from, @Param("to") Long to);
 
-    // Hero wins — scored only
+    /**
+     * Sum of assists per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, SUM(mp.assists) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY SUM(mp.assists) DESC")
+    List<Object[]> sumAssistsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    /**
+     * Max kills in a single game per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, MAX(mp.kills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.kills) DESC")
+    List<Object[]> maxKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    /**
+     * Max deaths in a single game per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, MAX(mp.deaths) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.deaths) DESC")
+    List<Object[]> maxDeathsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    /**
+     * Max assists in a single game per player in date range.
+     * Includes abandoned if game > 20 minutes.
+     */
+    @Query("SELECT mp.player, MAX(mp.assists) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.assists) DESC")
+    List<Object[]> maxAssistsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    // ─── Hero Stats ──────────────────────────────────────────────────────────
+
+    /**
+     * Hero wins overall. Only status = 1 counts as a win.
+     * Returns: heroName, winCount
+     */
     @Query("SELECT mp.heroName, COUNT(mp) FROM MatchPlayer mp " +
             "JOIN mp.match m WHERE m.status = 1 AND mp.playerStatus = 1 " +
             "GROUP BY mp.heroName")
     List<Object[]> heroWins();
 
-    // Hero stats overall — scored only
+    /**
+     * Hero stats overall across all players.
+     * Includes abandoned if game > 20 minutes.
+     * Returns: heroName, heroClass, games, kills, deaths, assists
+     */
     @Query("SELECT mp.heroName, mp.heroClass, COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
-            "WHERE m.status = 1 AND mp.playerStatus IN (1, 2) " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "GROUP BY mp.heroName, mp.heroClass ORDER BY COUNT(mp) DESC")
     List<Object[]> heroStatsOverall();
 
-    // Hero stats per player — scored only
+    /**
+     * Hero stats per player combination.
+     * Includes abandoned if game > 20 minutes.
+     * Returns: heroName, heroClass, playerId, username, kills, deaths, assists, games
+     */
     @Query("SELECT mp.heroName, mp.heroClass, mp.player.playerId, mp.player.username, " +
             "SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists), COUNT(mp) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
-            "WHERE m.status = 1 AND mp.playerStatus IN (1, 2) " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "GROUP BY mp.heroName, mp.heroClass, mp.player.playerId, mp.player.username")
     List<Object[]> heroStatsPerPlayer();
 
-    // Hero stats by player username — scored only
+    /**
+     * Hero stats for a specific player by username, ordered by games played descending.
+     * Includes abandoned if game > 20 minutes.
+     * Returns: heroName, heroClass, games, kills, deaths, assists
+     */
     @Query("SELECT mp.heroName, mp.heroClass, COUNT(mp), " +
             "SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
-            "WHERE m.status = 1 AND mp.playerStatus IN (1, 2) " +
+            "WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "AND LOWER(mp.player.username) = LOWER(:username) " +
             "GROUP BY mp.heroName, mp.heroClass " +
             "ORDER BY COUNT(mp) DESC")
     List<Object[]> heroStatsByPlayer(@Param("username") String username);
-
-    // KDA stats per player — scored only
-    @Query("SELECT mp.player, SUM(mp.kills) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY SUM(mp.kills) DESC")
-    List<Object[]> sumKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    @Query("SELECT mp.player, SUM(mp.deaths) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY SUM(mp.deaths) DESC")
-    List<Object[]> sumDeathsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    @Query("SELECT mp.player, SUM(mp.assists) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY SUM(mp.assists) DESC")
-    List<Object[]> sumAssistsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    @Query("SELECT mp.player, MAX(mp.kills) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY MAX(mp.kills) DESC")
-    List<Object[]> maxKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    @Query("SELECT mp.player, MAX(mp.deaths) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY MAX(mp.deaths) DESC")
-    List<Object[]> maxDeathsPerPlayer(@Param("from") Long from, @Param("to") Long to);
-
-    @Query("SELECT mp.player, MAX(mp.assists) FROM MatchPlayer mp " +
-            "JOIN mp.match m WHERE m.status = 1 " +
-            "AND mp.playerStatus IN (1, 2) " +
-            "AND m.startedAt BETWEEN :from AND :to " +
-            "GROUP BY mp.player ORDER BY MAX(mp.assists) DESC")
-    List<Object[]> maxAssistsPerPlayer(@Param("from") Long from, @Param("to") Long to);
 }
