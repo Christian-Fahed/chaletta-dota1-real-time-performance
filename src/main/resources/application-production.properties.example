@@ -30,3 +30,7 @@ app.default-user.role=ROLE_ADMIN
 app.rgc.api-url=https://ladder.rankedgaming.com/views/g4/ajax-games.php
 app.rgc.room=YOUR_ROOM_ID
 app.rgc.step=30
+
+# ─── SCHEDULER SETTINGS ────────────────────────────────────────────
+app.scheduler.interval-ms=15000
+app.scheduler.enabled=true

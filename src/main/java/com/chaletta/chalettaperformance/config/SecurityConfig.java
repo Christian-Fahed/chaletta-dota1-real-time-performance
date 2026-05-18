@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/weekly-titles/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/manager/**").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers("/admin/scheduler/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

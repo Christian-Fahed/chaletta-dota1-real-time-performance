@@ -1,5 +1,6 @@
 package com.chaletta.chalettaperformance.scheduler;
 
+import com.chaletta.chalettaperformance.config.SchedulerConfig;
 import com.chaletta.chalettaperformance.service.WeeklyTitleAssignmentService;
 import com.chaletta.chalettaperformance.service.external.GameSyncService;
 import lombok.RequiredArgsConstructor;
@@ -14,12 +15,22 @@ public class DataScheduler {
 
     private final GameSyncService gameSyncService;
     private final WeeklyTitleAssignmentService weeklyTitleAssignmentService;
+    private final SchedulerConfig schedulerConfig;
 
-    @Scheduled(fixedRate = 15000)
+    private long lastRun = 0;
+
+    @Scheduled(fixedDelayString = "1000") // checks every second
     public void fetchMatches() {
-        log.info("Running game sync...");
+        if (!schedulerConfig.isEnabled()) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastRun < schedulerConfig.getIntervalMs()) return;
+
+        lastRun = now;
+        log.info("Running game sync... (interval: {}ms)", schedulerConfig.getIntervalMs());
         gameSyncService.sync();
     }
+
 
     // Every Sunday at midnight
     @Scheduled(cron = "0 0 0 * * SUN")
