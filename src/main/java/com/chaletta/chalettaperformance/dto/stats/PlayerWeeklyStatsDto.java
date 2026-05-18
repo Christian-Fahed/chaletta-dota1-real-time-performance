@@ -6,14 +6,16 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class PlayerWeeklyStatsDto {
-    private Long playerId;
+    private Long   playerId;
     private String username;
-    private Long totalGames;
-    private Long totalKills;
-    private Long totalDeaths;
-    private Long totalAssists;
-    private Long totalWins;
-    private Long totalLosses;
+    private Long   totalGames;
+    private Long   totalKills;
+    private Long   totalDeaths;
+    private Long   totalAssists;
+    private Long   totalWins;
+    private Long   totalLosses;
     private Double winRate;
+    private Double weightedWinRate;
     private Double kdaRatio;
+    private String confidence;
 }
