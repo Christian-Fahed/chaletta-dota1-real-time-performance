@@ -76,7 +76,7 @@ public class GameSyncService {
                     }
 
                     // Skip games shorter than 20 minutes
-                    long duration = info.get("time").asLong();
+                    long duration = info.get("length").asLong();
                     if (duration < MIN_DURATION_SECONDS) {
                         log.info("Game {} duration {}s is under {} minutes, skipping.",
                                 gameId, duration, MIN_DURATION_SECONDS / 60);
