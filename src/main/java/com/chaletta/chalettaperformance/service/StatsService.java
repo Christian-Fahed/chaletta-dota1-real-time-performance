@@ -3,6 +3,7 @@ package com.chaletta.chalettaperformance.service;
 import com.chaletta.chalettaperformance.dto.stats.*;
 import com.chaletta.chalettaperformance.model.Player;
 import com.chaletta.chalettaperformance.repository.MatchPlayerRepository;
+import com.chaletta.chalettaperformance.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 public class StatsService {
 
     private final MatchPlayerRepository matchPlayerRepository;
+    private final PlayerRepository      playerRepository;
 
     // ─── Overall Stats ───────────────────────────────────────────────────────
 
@@ -25,25 +27,34 @@ public class StatsService {
         List<Object[]> losses = matchPlayerRepository.lossesPerPlayerOverall();
         List<Object[]> heroes = matchPlayerRepository.heroPlayCountPerPlayer();
 
-        Map<Long, Long>   winsMap   = buildLongMap(wins);
-        Map<Long, Long>   lossesMap = buildLongMap(losses);
-        Map<Long, String> heroMap   = buildBestHeroMap(heroes);
+        Map<Long, Long>    winsMap   = buildLongMap(wins);
+        Map<Long, Long>    lossesMap = buildLongMap(losses);
+        Map<Long, String>  heroMap   = buildBestHeroMap(heroes);
+        Map<Long, Integer> pointsMap = buildPointsMap();
 
+        // overallStatsPerPlayer now returns:
+        // [0] playerId, [1] username, [2] games,
+        // [3] kills,    [4] deaths,   [5] assists,
+        // [6] creepKills, [7] creepDenies, [8] neutralKills
         List<PlayerOverallStatsDto> leaderboard = stats.stream().map(row -> {
-            Long   playerId = (Long)   row[0];
-            String username = (String) row[1];
-            Long   games    = (Long)   row[2];
-            Long   kills    = (Long)   row[3];
-            Long   deaths   = (Long)   row[4];
-            Long   assists  = (Long)   row[5];
-            Long   w        = winsMap.getOrDefault(playerId, 0L);
-            Long   l        = lossesMap.getOrDefault(playerId, 0L);
-            Long   scored   = w + l;
-            Double winRate  = scored > 0 ? round(w * 100.0 / scored) : 0.0;
-            Double kda      = deaths > 0
+            Long   playerId     = (Long)   row[0];
+            String username     = (String) row[1];
+            Long   games        = (Long)   row[2];
+            Long   kills        = (Long)   row[3];
+            Long   deaths       = (Long)   row[4];
+            Long   assists      = (Long)   row[5];
+            Long   creepKills   = row[6] != null ? ((Number) row[6]).longValue() : 0L;
+            Long   creepDenies  = row[7] != null ? ((Number) row[7]).longValue() : 0L;
+            Long   neutralKills = row[8] != null ? ((Number) row[8]).longValue() : 0L;
+            Long   w            = winsMap.getOrDefault(playerId, 0L);
+            Long   l            = lossesMap.getOrDefault(playerId, 0L);
+            Long   scored       = w + l;
+            Double winRate      = scored > 0 ? round(w * 100.0 / scored) : 0.0;
+            Double kda          = deaths > 0
                     ? round((kills + assists) * 1.0 / deaths)
                     : round((kills + assists) * 1.0);
-            String conf     = games < 5 ? "LOW" : games < 20 ? "MEDIUM" : "HIGH";
+            String conf         = games < 5 ? "LOW" : games < 20 ? "MEDIUM" : "HIGH";
+            Integer points      = pointsMap.getOrDefault(playerId, 100);
 
             return new PlayerOverallStatsDto(
                     playerId, username, games, kills, deaths, assists,
@@ -53,7 +64,9 @@ public class StatsService {
                     round(assists * 1.0 / Math.max(1, games)),
                     kda,
                     heroMap.getOrDefault(playerId, "—"),
-                    conf
+                    conf,
+                    creepKills, creepDenies, neutralKills,
+                    points
             );
         }).collect(Collectors.toList());
 
@@ -71,8 +84,9 @@ public class StatsService {
             p.setWeightedWinRate(round(weighted));
         });
 
+        // Sort by points descending
         leaderboard.sort(Comparator
-                .comparingDouble(PlayerOverallStatsDto::getWeightedWinRate)
+                .comparingInt((PlayerOverallStatsDto p) -> p.getPoints() != null ? p.getPoints() : 0)
                 .reversed());
 
         return leaderboard;
@@ -85,31 +99,43 @@ public class StatsService {
         List<Object[]> wins   = matchPlayerRepository.winsPerPlayerInRange(from, to);
         List<Object[]> losses = matchPlayerRepository.lossesPerPlayerInRange(from, to);
 
-        Map<Long, Long> winsMap   = buildLongMap(wins);
-        Map<Long, Long> lossesMap = buildLongMap(losses);
+        Map<Long, Long>    winsMap   = buildLongMap(wins);
+        Map<Long, Long>    lossesMap = buildLongMap(losses);
+        Map<Long, Integer> pointsMap = buildPointsMap();
 
+        // statsPerPlayerInRange now returns:
+        // [0] playerId, [1] username, [2] games,
+        // [3] kills,    [4] deaths,   [5] assists,
+        // [6] creepKills, [7] creepDenies, [8] neutralKills
         List<PlayerWeeklyStatsDto> leaderboard = stats.stream().map(row -> {
-            Long   playerId = (Long)   row[0];
-            String username = (String) row[1];
-            Long   games    = (Long)   row[2];
-            Long   kills    = (Long)   row[3];
-            Long   deaths   = (Long)   row[4];
-            Long   assists  = (Long)   row[5];
-            Long   w        = winsMap.getOrDefault(playerId, 0L);
-            Long   l        = lossesMap.getOrDefault(playerId, 0L);
-            Long   scored   = w + l;
-            Double winRate  = scored > 0 ? round(w * 100.0 / scored) : 0.0;
-            Double kda      = deaths > 0
+            Long   playerId     = (Long)   row[0];
+            String username     = (String) row[1];
+            Long   games        = (Long)   row[2];
+            Long   kills        = (Long)   row[3];
+            Long   deaths       = (Long)   row[4];
+            Long   assists      = (Long)   row[5];
+            Long   creepKills   = row[6] != null ? ((Number) row[6]).longValue() : 0L;
+            Long   creepDenies  = row[7] != null ? ((Number) row[7]).longValue() : 0L;
+            Long   neutralKills = row[8] != null ? ((Number) row[8]).longValue() : 0L;
+            Long   w            = winsMap.getOrDefault(playerId, 0L);
+            Long   l            = lossesMap.getOrDefault(playerId, 0L);
+            Long   scored       = w + l;
+            Double winRate      = scored > 0 ? round(w * 100.0 / scored) : 0.0;
+            Double kda          = deaths > 0
                     ? round((kills + assists) * 1.0 / deaths)
                     : round((kills + assists) * 1.0);
-            String conf     = games < 3 ? "LOW" : games < 8 ? "MEDIUM" : "HIGH";
+            String conf         = games < 3 ? "LOW" : games < 8 ? "MEDIUM" : "HIGH";
+            Integer points      = pointsMap.getOrDefault(playerId, 100);
 
             return new PlayerWeeklyStatsDto(
                     playerId, username, games, kills, deaths, assists,
-                    w, l, winRate, 0.0, kda, conf
+                    w, l, winRate, 0.0, kda, conf,
+                    creepKills, creepDenies, neutralKills,
+                    points
             );
         }).collect(Collectors.toList());
 
+        // Group average win rate
         double groupAvg = leaderboard.stream()
                 .mapToDouble(PlayerWeeklyStatsDto::getWinRate)
                 .average()
@@ -122,8 +148,9 @@ public class StatsService {
             p.setWeightedWinRate(round(weighted));
         });
 
+        // Sort by points descending
         leaderboard.sort(Comparator
-                .comparingDouble(PlayerWeeklyStatsDto::getWeightedWinRate)
+                .comparingInt((PlayerWeeklyStatsDto p) -> p.getPoints() != null ? p.getPoints() : 0)
                 .reversed());
 
         return leaderboard;
@@ -140,18 +167,14 @@ public class StatsService {
             winsMap.put((String) row[0], ((Number) row[1]).longValue());
         }
 
-        // Group rows by hero name
-        // heroStatsPerPlayer returns:
         // [0] heroName, [1] heroClass, [2] playerId, [3] username,
         // [4] kills,    [5] deaths,    [6] assists,  [7] games
         Map<String, List<Object[]>> byHero = new LinkedHashMap<>();
         for (Object[] row : perPlayer) {
-            String heroName = (String) row[0];
-            byHero.computeIfAbsent(heroName, k -> new ArrayList<>()).add(row);
+            byHero.computeIfAbsent((String) row[0], k -> new ArrayList<>()).add(row);
         }
 
         List<HeroPlayerStatsDto> result = new ArrayList<>();
-
         for (Map.Entry<String, List<Object[]>> entry : byHero.entrySet()) {
             String         heroName = entry.getKey();
             List<Object[]> rows     = entry.getValue();
@@ -162,13 +185,8 @@ public class StatsService {
             long totalDeaths  = rows.stream().mapToLong(r -> ((Number) r[5]).longValue()).sum();
             long totalAssists = rows.stream().mapToLong(r -> ((Number) r[6]).longValue()).sum();
             Long heroWin      = winsMap.getOrDefault(heroName, 0L);
+            Double winRate    = totalGames >= 3 ? round(heroWin * 100.0 / totalGames) : null;
 
-            // Only show win rate if hero has been played 3+ times
-            Double winRate = totalGames >= 3
-                    ? round(heroWin * 100.0 / totalGames)
-                    : null;
-
-            // Best player = most kills with this hero
             Object[] best = rows.stream()
                     .max(Comparator.comparingLong(r -> ((Number) r[4]).longValue()))
                     .orElse(rows.get(0));
@@ -193,7 +211,6 @@ public class StatsService {
     // ─── Hero Stats By Player ────────────────────────────────────────────────
 
     public List<HeroPlayerStatsDto> getHeroStatsByPlayer(String username) {
-        // heroStatsByPlayer returns:
         // [0] heroName, [1] heroClass, [2] games, [3] kills, [4] deaths, [5] assists
         return matchPlayerRepository.heroStatsByPlayer(username).stream().map(row -> {
             String heroName  = (String)          row[0];
@@ -206,8 +223,7 @@ public class StatsService {
             return new HeroPlayerStatsDto(
                     heroName, heroClass,
                     played, kills, deaths, assists,
-                    null,
-                    null, username,
+                    null, null, username,
                     kills, deaths, assists, played
             );
         }).collect(Collectors.toList());
@@ -234,12 +250,22 @@ public class StatsService {
         return map;
     }
 
+    /**
+     * Build a map of playerId -> current points from the Player table.
+     */
+    private Map<Long, Integer> buildPointsMap() {
+        Map<Long, Integer> map = new HashMap<>();
+        for (Player p : playerRepository.findAll()) {
+            map.put(p.getPlayerId(), p.getPoints() != null ? p.getPoints() : 100);
+        }
+        return map;
+    }
+
     private Map<Long, String> buildBestHeroMap(List<Object[]> rows) {
         // rows: [0] playerId, [1] heroName, [2] count
         Map<Long, List<Object[]>> byPlayer = new HashMap<>();
         for (Object[] row : rows) {
-            Long playerId = (Long) row[0];
-            byPlayer.computeIfAbsent(playerId, k -> new ArrayList<>()).add(row);
+            byPlayer.computeIfAbsent((Long) row[0], k -> new ArrayList<>()).add(row);
         }
 
         Map<Long, String> result = new HashMap<>();

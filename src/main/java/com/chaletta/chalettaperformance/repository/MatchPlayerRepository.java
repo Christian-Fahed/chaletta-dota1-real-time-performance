@@ -76,10 +76,11 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
     /**
      * Overall stats per player across all scored matches.
      * Includes abandoned players if game > 20 minutes.
-     * Returns: playerId, username, games, kills, deaths, assists
+     * Returns: playerId, username, games, kills, deaths, assists, creep stats
      */
     @Query("SELECT mp.player.playerId, mp.player.username, " +
-            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
+            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists), " +
+            "SUM(mp.creepKills), SUM(mp.creepDenies), SUM(mp.neutralKills) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
             "WHERE m.status = 1 " +
             "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
@@ -123,10 +124,11 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
     /**
      * Stats per player within a Unix timestamp range.
      * Includes abandoned players if game > 20 minutes.
-     * Returns: playerId, username, games, kills, deaths, assists
+     * Returns: playerId, username, games, kills, deaths, assists, creep stats
      */
     @Query("SELECT mp.player.playerId, mp.player.username, " +
-            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists) " +
+            "COUNT(mp), SUM(mp.kills), SUM(mp.deaths), SUM(mp.assists), " +
+            "SUM(mp.creepKills), SUM(mp.creepDenies), SUM(mp.neutralKills) " +
             "FROM MatchPlayer mp JOIN mp.match m " +
             "WHERE m.status = 1 " +
             "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
@@ -320,4 +322,94 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.heroName, mp.heroClass " +
             "ORDER BY COUNT(mp) DESC")
     List<Object[]> heroStatsByPlayer(@Param("username") String username);
+
+    // ─── Creep Kills ─────────────────────────────────────────────────────────
+
+    @Query("SELECT mp.player, SUM(mp.creepKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY SUM(mp.creepKills) DESC")
+    List<Object[]> sumCreepKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MAX(mp.creepKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.creepKills) DESC")
+    List<Object[]> maxCreepKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.creepKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.creepKills) ASC")
+    List<Object[]> minCreepKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+// ─── Creep Denies ─────────────────────────────────────────────────────────
+
+    @Query("SELECT mp.player, SUM(mp.creepDenies) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY SUM(mp.creepDenies) DESC")
+    List<Object[]> sumCreepDeniesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MAX(mp.creepDenies) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.creepDenies) DESC")
+    List<Object[]> maxCreepDeniesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.creepDenies) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.creepDenies) ASC")
+    List<Object[]> minCreepDeniesPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+// ─── Neutral Kills ────────────────────────────────────────────────────────
+
+    @Query("SELECT mp.player, SUM(mp.neutralKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY SUM(mp.neutralKills) DESC")
+    List<Object[]> sumNeutralKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MAX(mp.neutralKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MAX(mp.neutralKills) DESC")
+    List<Object[]> maxNeutralKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.neutralKills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.neutralKills) ASC")
+    List<Object[]> minNeutralKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.kills) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.kills) ASC")
+    List<Object[]> minKillsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.deaths) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.deaths) ASC")
+    List<Object[]> minDeathsPerPlayer(@Param("from") Long from, @Param("to") Long to);
+
+    @Query("SELECT mp.player, MIN(mp.assists) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "AND m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player ORDER BY MIN(mp.assists) ASC")
+    List<Object[]> minAssistsPerPlayer(@Param("from") Long from, @Param("to") Long to);
 }

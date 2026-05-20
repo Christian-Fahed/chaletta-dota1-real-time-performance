@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -56,18 +57,14 @@ public class HomePageService {
 
             String topPlayer = topPlayerDto != null ? topPlayerDto.getUsername() : "—";
 
-            // ── Top player's best hero = best KDA with at least 3 games on that hero ──
+            // ── Top player's best hero = most played hero with 3+ games ──
             String topPlayerBestHero = "—";
             if (topPlayerDto != null) {
                 topPlayerBestHero = matchPlayerRepository
                         .heroStatsByPlayer(topPlayerDto.getUsername())
                         .stream()
                         .filter(r -> ((Number) r[2]).longValue() >= 3)
-                        .max((a, b) -> {
-                            double kdaA = computeKda(a);
-                            double kdaB = computeKda(b);
-                            return Double.compare(kdaA, kdaB);
-                        })
+                        .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue())) // most played
                         .map(r -> (String) r[0])
                         .orElse(topPlayerDto.getMostPlayedHero() != null
                                 ? topPlayerDto.getMostPlayedHero()
@@ -109,7 +106,12 @@ public class HomePageService {
                                         mp.getTeamSide(),
                                         mp.getKills(),
                                         mp.getDeaths(),
-                                        mp.getAssists()))
+                                        mp.getAssists(),
+                                        mp.getCreepKills(),   // ← new
+                                        mp.getCreepDenies(),  // ← new
+                                        mp.getNeutralKills(), // ← new
+                                        mp.getRatingChange()  // ← new
+                                ))
                                 .collect(Collectors.toList());
                         return new RecentMatchDto(
                                 m.getGameId(), m.getStartedAt(),

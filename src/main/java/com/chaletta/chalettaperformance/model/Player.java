@@ -17,4 +17,7 @@ public class Player {
     private String uuid;
 
     private String username;
+
+    @Column(name = "points", nullable = false)
+    private Integer points = 100;
 }

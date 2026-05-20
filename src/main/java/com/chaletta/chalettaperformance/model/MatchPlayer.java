@@ -29,6 +29,18 @@ public class MatchPlayer {
     @Column(name = "team_side")
     private Integer teamSide;
 
+    @Column(name = "creep_kills")
+    private Integer creepKills;
+
+    @Column(name = "creep_denies")
+    private Integer creepDenies;
+
+    @Column(name = "neutral_kills")
+    private Integer neutralKills;
+
+    @Column(name = "rating_change")
+    private Integer ratingChange;
+
     @Column(name = "team_number")
     private Integer teamNumber;
 

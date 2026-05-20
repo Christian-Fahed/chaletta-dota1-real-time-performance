@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Iterator;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -34,12 +35,24 @@ public class PlayerIngestionService {
 
     /**
      * Resolve a player from the Json Node.
-     * @param playersNode The specified json node.
+     * @param playerNode The specified json node.
      * @return The resolved player if found, null otherwise.
      */
-    public Player resolvePlayer(JsonNode playersNode) {
-        String uid = playersNode.get("uid").asText();
-        return playerRepository.findByUuid(uid).orElse(null);
+    public Player resolvePlayer(JsonNode playerNode) {
+        String uid         = playerNode.get("uid").asText();
+        String name        = playerNode.get("name").asText();
+        int    ratingChange = playerNode.get("ratingchange").asInt();
+
+        Optional<Player> existing = playerRepository.findByUuid(uid);
+        if (existing.isPresent()) {
+            Player p = existing.get();
+            // Apply the point change from this game
+            int current = p.getPoints() != null ? p.getPoints() : 100;
+            p.setPoints(current + ratingChange);
+            return playerRepository.save(p);
+        }
+
+        return null;
     }
 
 }

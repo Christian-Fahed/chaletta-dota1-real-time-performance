@@ -13,4 +13,8 @@ public class RecentMatchPlayerDto {
     private Integer kills;
     private Integer deaths;
     private Integer assists;
+    private Integer creepKills;
+    private Integer creepDenies;
+    private Integer neutralKills;
+    private Integer ratingChange;
 }

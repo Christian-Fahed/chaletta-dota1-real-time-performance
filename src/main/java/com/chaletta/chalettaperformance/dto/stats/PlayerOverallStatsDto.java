@@ -22,4 +22,9 @@ public class PlayerOverallStatsDto {
     private Double kdaRatio;
     private String mostPlayedHero;
     private String confidence;
+    // ── New fields ──
+    private Long   totalCreepKills;
+    private Long   totalCreepDenies;
+    private Long   totalNeutralKills;
+    private Integer points;
 }
