@@ -236,84 +236,15 @@ public class StatsService {
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    /**
-     * Build playerId -> win count map from query results.
-     */
-    private Map<Long, Long> buildLongMap(List<Object[]> rows) {
-        Map<Long, Long> map = new HashMap<>();
-        for (Object[] row : rows) {
-            map.put((Long) row[0], ((Number) row[1]).longValue());
-        }
-        return map;
-    }
 
-    /**
-     * Build playerId -> most played hero (3+ games threshold).
-     * Falls back to most played regardless if no hero meets threshold.
-     */
-    private Map<Long, String> buildBestHeroMap(List<Object[]> rows) {
-        // rows: [0] playerId, [1] heroName, [2] count
-        Map<Long, List<Object[]>> byPlayer = new HashMap<>();
-        for (Object[] row : rows) {
-            byPlayer.computeIfAbsent((Long) row[0], k -> new ArrayList<>()).add(row);
-        }
 
-        Map<Long, String> result = new HashMap<>();
-        for (Map.Entry<Long, List<Object[]>> entry : byPlayer.entrySet()) {
-            entry.getValue().stream()
-                    .filter(r -> ((Number) r[2]).longValue() >= 3)
-                    .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue()))
-                    .ifPresentOrElse(
-                            best -> result.put(entry.getKey(), (String) best[1]),
-                            () -> entry.getValue().stream()
-                                    .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue()))
-                                    .ifPresent(best -> result.put(entry.getKey(), (String) best[1]))
-                    );
-        }
-        return result;
-    }
-
-    /**
-     * Build playerId -> hero with most wins.
-     * Rows come ordered by wins DESC so first occurrence per player = best.
-     * [0] playerId, [1] heroName, [2] winCount
-     */
-    private Map<Long, String> buildBestHeroByWinsMap(List<Object[]> rows) {
-        Map<Long, String> result = new HashMap<>();
-        for (Object[] row : rows) {
-            Long playerId = (Long) row[0];
-            if (!result.containsKey(playerId)) {
-                result.put(playerId, (String) row[1]);
-            }
-        }
-        return result;
-    }
 
     private Double round(Double val) {
         if (val == null) return 0.0;
         return Math.round(val * 100.0) / 100.0;
     }
 
-    /**
-     * Points = 100 + (wins × 5) - (losses × 3)
-     * Computed from actual win/loss records, not API ratingChange.
-     */
-    private Map<Long, Integer> buildPointsMap() {
-        Map<Long, Long> winsMap   = buildLongMap(matchPlayerRepository.winsPerPlayerOverall());
-        Map<Long, Long> lossesMap = buildLongMap(matchPlayerRepository.lossesPerPlayerOverall());
 
-        Set<Long> allIds = new HashSet<>();
-        allIds.addAll(winsMap.keySet());
-        allIds.addAll(lossesMap.keySet());
-
-        Map<Long, Integer> map = new HashMap<>();
-        for (Long pid : allIds) {
-            long w = winsMap.getOrDefault(pid, 0L);
-            long l = lossesMap.getOrDefault(pid, 0L);
-            map.put(pid, (int)(100 + (w * 5) - (l * 3)));
-        }
-        return map;
-    }
 
     /**
      * Weekly delta = (wins this week × 5) - (losses this week × 3)
@@ -332,6 +263,73 @@ public class StatsService {
             long w = winsMap.getOrDefault(pid, 0L);
             long l = lossesMap.getOrDefault(pid, 0L);
             map.put(pid, (int)((w * 5) - (l * 3)));
+        }
+        return map;
+    }
+
+
+    private Map<Long, Long> buildLongMap(List<Object[]> rows) {
+        Map<Long, Long> map = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row[0] == null) continue;
+            Long key = ((Number) row[0]).longValue(); // ← was (Long) row[0]
+            Long val = ((Number) row[1]).longValue();
+            map.put(key, val);
+        }
+        return map;
+    }
+
+    // Fix 2 — buildBestHeroMap
+    private Map<Long, String> buildBestHeroMap(List<Object[]> rows) {
+        Map<Long, List<Object[]>> byPlayer = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row[0] == null) continue;
+            Long pid = ((Number) row[0]).longValue(); // ← was (Long) row[0]
+            byPlayer.computeIfAbsent(pid, k -> new ArrayList<>()).add(row);
+        }
+
+        Map<Long, String> result = new HashMap<>();
+        for (Map.Entry<Long, List<Object[]>> entry : byPlayer.entrySet()) {
+            entry.getValue().stream()
+                    .filter(r -> ((Number) r[2]).longValue() >= 3)
+                    .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue()))
+                    .ifPresentOrElse(
+                            best -> result.put(entry.getKey(), (String) best[1]),
+                            () -> entry.getValue().stream()
+                                    .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue()))
+                                    .ifPresent(best -> result.put(entry.getKey(), (String) best[1]))
+                    );
+        }
+        return result;
+    }
+
+    // Fix 3 — buildBestHeroByWinsMap
+    private Map<Long, String> buildBestHeroByWinsMap(List<Object[]> rows) {
+        Map<Long, String> result = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row[0] == null || row[1] == null) continue;
+            Long pid = ((Number) row[0]).longValue(); // ← was (Long) row[0]
+            if (!result.containsKey(pid)) {
+                result.put(pid, (String) row[1]);
+            }
+        }
+        return result;
+    }
+
+    // Fix 4 — buildPointsMap
+    private Map<Long, Integer> buildPointsMap() {
+        Map<Long, Long> winsMap   = buildLongMap(matchPlayerRepository.winsPerPlayerOverall());
+        Map<Long, Long> lossesMap = buildLongMap(matchPlayerRepository.lossesPerPlayerOverall());
+
+        Set<Long> allIds = new HashSet<>();
+        allIds.addAll(winsMap.keySet());
+        allIds.addAll(lossesMap.keySet());
+
+        Map<Long, Integer> map = new HashMap<>();
+        for (Long pid : allIds) {
+            long w = winsMap.getOrDefault(pid, 0L);
+            long l = lossesMap.getOrDefault(pid, 0L);
+            map.put(pid, (int)(100 + (w * 5) - (l * 3)));
         }
         return map;
     }
