@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,15 +21,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class HomePageService {
 
-    private final StatsService statsService;
-    private final MatchRepository matchRepository;
+    private final StatsService          statsService;
+    private final MatchRepository       matchRepository;
     private final MatchPlayerRepository matchPlayerRepository;
-    private final PlayerRepository playerRepository;
+    private final PlayerRepository      playerRepository;
     private final WeeklyTitleRepository weeklyTitleRepository;
 
     public HomePageDto getHomePageData() {
         try {
-            // ── Global KDA ──
+            // ── Global KDA ────────────────────────────────────────────
             List<Object[]> kdaResult = matchPlayerRepository.globalKDA();
             Object[] kda      = kdaResult.isEmpty() ? new Object[]{0L, 0L, 0L} : kdaResult.get(0);
             Long totalMatches = matchRepository.totalMatches();
@@ -39,25 +38,25 @@ public class HomePageService {
             Long totalDeaths  = kda[1] != null ? ((Number) kda[1]).longValue() : 0L;
             Long totalAssists = kda[2] != null ? ((Number) kda[2]).longValue() : 0L;
 
-            // ── Most played hero overall ──
+            // ── Most played hero across ALL players ───────────────────
             String mostPlayedHero = matchPlayerRepository
                     .mostPlayedHeroes(PageRequest.of(0, 1))
                     .stream().findFirst()
                     .map(r -> (String) r[0])
                     .orElse("—");
 
-            // ── Leaderboard (sorted by win rate desc in StatsService) ──
+            // ── Leaderboard sorted by points desc ─────────────────────
             List<PlayerOverallStatsDto> leaderboard = statsService.getOverallStats();
 
-            // ── Top player = best win rate with at least 5 games ──
+            // ── Top player = highest points with 5+ games ─────────────
             PlayerOverallStatsDto topPlayerDto = leaderboard.stream()
-                    .filter(p -> p.getTotalGames() >= 5)
+                    .filter(p -> p.getTotalGames() != null && p.getTotalGames() >= 5)
                     .findFirst()
                     .orElse(leaderboard.isEmpty() ? null : leaderboard.get(0));
 
             String topPlayer = topPlayerDto != null ? topPlayerDto.getUsername() : "—";
 
-            // ── Top player's best hero = most played hero with 3+ games ──
+            // ── Top player's best hero by WINS ────────────────────────
             String topPlayerBestHero = "—";
             if (topPlayerDto != null) {
                 topPlayerBestHero = matchPlayerRepository
@@ -66,20 +65,25 @@ public class HomePageService {
                         .filter(r -> topPlayerDto.getPlayerId().equals((Long) r[0]))
                         .findFirst()
                         .map(r -> (String) r[1])
-                        .orElse(topPlayerDto.getMostPlayedHero() != null
+                        .orElseGet(() -> topPlayerDto.getBestHeroByWins() != null
+                                ? topPlayerDto.getBestHeroByWins()
+                                : topPlayerDto.getMostPlayedHero() != null
                                 ? topPlayerDto.getMostPlayedHero()
                                 : "—");
             }
 
+            // ── Summary DTO — order must match OverallSummaryDto fields ──
             OverallSummaryDto summary = new OverallSummaryDto(
-                    totalMatches, totalPlayers, totalKills,
-                    totalDeaths, totalAssists, mostPlayedHero,
-                    topPlayer, topPlayerBestHero);
+                    totalMatches, totalPlayers,
+                    totalKills, totalDeaths, totalAssists,
+                    topPlayer,          // ← was wrongly set to mostPlayedHero
+                    topPlayerBestHero,  // ← was wrongly set to topPlayer
+                    mostPlayedHero);    // ← was wrongly set to topPlayerBestHero
 
-            // ── Heroes ──
+            // ── Hero stats ────────────────────────────────────────────
             List<HeroPlayerStatsDto> heroes = statsService.getHeroStats();
 
-            // ── Current week titles ──
+            // ── Current week titles ───────────────────────────────────
             LocalDate weekStart = LocalDate.now().with(DayOfWeek.MONDAY);
             LocalDate weekEnd   = weekStart.plusDays(6);
             List<WeeklyTitleDto> titles = weeklyTitleRepository
@@ -91,7 +95,7 @@ public class HomePageService {
                             t.getValue()))
                     .collect(Collectors.toList());
 
-            // ── Recent matches (last 5) ──
+            // ── Recent matches (last 5) ───────────────────────────────
             List<RecentMatchDto> recentMatches = matchRepository
                     .findAll(PageRequest.of(0, 5, Sort.by("startedAt").descending()))
                     .stream()
@@ -107,10 +111,10 @@ public class HomePageService {
                                         mp.getKills(),
                                         mp.getDeaths(),
                                         mp.getAssists(),
-                                        mp.getCreepKills(),   // ← new
-                                        mp.getCreepDenies(),  // ← new
-                                        mp.getNeutralKills(), // ← new
-                                        mp.getRatingChange()  // ← new
+                                        mp.getCreepKills(),
+                                        mp.getCreepDenies(),
+                                        mp.getNeutralKills(),
+                                        mp.getRatingChange()
                                 ))
                                 .collect(Collectors.toList());
                         return new RecentMatchDto(
@@ -125,16 +129,5 @@ public class HomePageService {
             log.error("HomePageService failed: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to build home page data: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * Compute KDA ratio from a heroStatsByPlayer row.
-     * Row: [heroName, heroClass, games, kills, deaths, assists]
-     */
-    private double computeKda(Object[] row) {
-        long kills   = ((Number) row[3]).longValue();
-        long deaths  = ((Number) row[4]).longValue();
-        long assists = ((Number) row[5]).longValue();
-        return deaths > 0 ? (kills + assists) * 1.0 / deaths : kills + assists;
     }
 }

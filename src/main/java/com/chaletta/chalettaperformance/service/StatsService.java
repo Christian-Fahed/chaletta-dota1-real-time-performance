@@ -295,31 +295,43 @@ public class StatsService {
     }
 
     /**
-     * Compute points dynamically from ratingChange sum.
-     * Points = 100 (start) + SUM(all ratingChanges).
-     * This is always accurate regardless of re-syncs.
+     * Points = 100 + (wins × 5) - (losses × 3)
+     * Computed from actual win/loss records, not API ratingChange.
      */
     private Map<Long, Integer> buildPointsMap() {
+        Map<Long, Long> winsMap   = buildLongMap(matchPlayerRepository.winsPerPlayerOverall());
+        Map<Long, Long> lossesMap = buildLongMap(matchPlayerRepository.lossesPerPlayerOverall());
+
+        Set<Long> allIds = new HashSet<>();
+        allIds.addAll(winsMap.keySet());
+        allIds.addAll(lossesMap.keySet());
+
         Map<Long, Integer> map = new HashMap<>();
-        for (Object[] row : matchPlayerRepository.totalRatingChangePerPlayer()) {
-            Long playerId  = (Long) row[0];
-            int  ratingSum = row[1] != null ? ((Number) row[1]).intValue() : 0;
-            map.put(playerId, 100 + ratingSum); // 100 = starting points
+        for (Long pid : allIds) {
+            long w = winsMap.getOrDefault(pid, 0L);
+            long l = lossesMap.getOrDefault(pid, 0L);
+            map.put(pid, (int)(100 + (w * 5) - (l * 3)));
         }
         return map;
     }
 
     /**
-     * Compute points delta for a specific week only.
-     * Can be negative (bad week) or positive (good week).
-     * Does NOT start from 100 — shows net change this week only.
+     * Weekly delta = (wins this week × 5) - (losses this week × 3)
+     * Can be negative. Does NOT include the 100 base.
      */
     private Map<Long, Integer> buildWeeklyPointsMap(long from, long to) {
+        Map<Long, Long> winsMap   = buildLongMap(matchPlayerRepository.winsPerPlayerInRange(from, to));
+        Map<Long, Long> lossesMap = buildLongMap(matchPlayerRepository.lossesPerPlayerInRange(from, to));
+
+        Set<Long> allIds = new HashSet<>();
+        allIds.addAll(winsMap.keySet());
+        allIds.addAll(lossesMap.keySet());
+
         Map<Long, Integer> map = new HashMap<>();
-        for (Object[] row : matchPlayerRepository.totalRatingChangePerPlayerInRange(from, to)) {
-            Long playerId = (Long) row[0];
-            int  delta    = row[1] != null ? ((Number) row[1]).intValue() : 0;
-            map.put(playerId, delta);
+        for (Long pid : allIds) {
+            long w = winsMap.getOrDefault(pid, 0L);
+            long l = lossesMap.getOrDefault(pid, 0L);
+            map.put(pid, (int)((w * 5) - (l * 3)));
         }
         return map;
     }

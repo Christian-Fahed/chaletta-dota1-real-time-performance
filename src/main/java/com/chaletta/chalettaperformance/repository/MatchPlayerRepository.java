@@ -60,17 +60,6 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200))")
     List<Object[]> globalKDA();
 
-    /**
-     * Most played heroes overall, ordered by play count descending.
-     * Includes abandoned players if game > 20 minutes.
-     */
-    @Query("SELECT mp.heroName, COUNT(mp) as cnt FROM MatchPlayer mp " +
-            "JOIN mp.match m " +
-            "WHERE m.status = 1 " +
-            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
-            "GROUP BY mp.heroName ORDER BY cnt DESC")
-    List<Object[]> mostPlayedHeroes(Pageable pageable);
-
     // ─── Per Player — Overall ────────────────────────────────────────────────
 
     /**
@@ -86,6 +75,13 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
             "GROUP BY mp.player.playerId, mp.player.username")
     List<Object[]> overallStatsPerPlayer();
+
+    @Query("SELECT mp.heroName, COUNT(mp) as plays FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.status = 1 " +
+            "AND mp.heroName IS NOT NULL " +
+            "AND (mp.playerStatus IN (1, 2) OR (mp.playerStatus = 5 AND m.duration > 1200)) " +
+            "GROUP BY mp.heroName ORDER BY plays DESC")
+    List<Object[]> mostPlayedHeroes(Pageable pageable);
 
     // Total rating change per player across all games
     @Query("SELECT mp.player.playerId, SUM(mp.ratingChange) FROM MatchPlayer mp " +
