@@ -19,8 +19,6 @@ public class PlayerIngestionService {
     /**
      * Check if the specified players node contains
      * any of the players in the database.
-     * @param playersNode The specified player node.
-     * @return True if it has known players, false otherwise.
      */
     public boolean hasKnownPlayer(JsonNode playersNode) {
         Iterator<JsonNode> iter = playersNode.elements();
@@ -34,25 +32,16 @@ public class PlayerIngestionService {
     }
 
     /**
-     * Resolve a player from the Json Node.
-     * @param playerNode The specified json node.
-     * @return The resolved player if found, null otherwise.
+     * Resolve a registered player from the JSON node.
+     * Points are NOT updated here — they are computed dynamically
+     * from SUM(ratingChange) in StatsService.
+     *
+     * @return The player if registered, null if unknown.
      */
     public Player resolvePlayer(JsonNode playerNode) {
-        String uid         = playerNode.get("uid").asText();
-        String name        = playerNode.get("name").asText();
-        int    ratingChange = playerNode.get("ratingchange").asInt();
+        String uid = playerNode.get("uid").asText();
 
         Optional<Player> existing = playerRepository.findByUuid(uid);
-        if (existing.isPresent()) {
-            Player p = existing.get();
-            // Apply the point change from this game
-            int current = p.getPoints() != null ? p.getPoints() : 100;
-            p.setPoints(current + ratingChange);
-            return playerRepository.save(p);
-        }
-
-        return null;
+        return existing.orElse(null);
     }
-
 }

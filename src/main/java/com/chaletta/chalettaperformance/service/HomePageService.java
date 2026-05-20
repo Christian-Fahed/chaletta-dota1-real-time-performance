@@ -61,11 +61,11 @@ public class HomePageService {
             String topPlayerBestHero = "—";
             if (topPlayerDto != null) {
                 topPlayerBestHero = matchPlayerRepository
-                        .heroStatsByPlayer(topPlayerDto.getUsername())
+                        .heroWinsPerPlayer()
                         .stream()
-                        .filter(r -> ((Number) r[2]).longValue() >= 3)
-                        .max(Comparator.comparingLong(r -> ((Number) r[2]).longValue())) // most played
-                        .map(r -> (String) r[0])
+                        .filter(r -> topPlayerDto.getPlayerId().equals((Long) r[0]))
+                        .findFirst()
+                        .map(r -> (String) r[1])
                         .orElse(topPlayerDto.getMostPlayedHero() != null
                                 ? topPlayerDto.getMostPlayedHero()
                                 : "—");

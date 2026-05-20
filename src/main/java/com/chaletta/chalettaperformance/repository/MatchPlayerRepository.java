@@ -87,6 +87,25 @@ public interface MatchPlayerRepository extends JpaRepository<MatchPlayer, Long> 
             "GROUP BY mp.player.playerId, mp.player.username")
     List<Object[]> overallStatsPerPlayer();
 
+    // Total rating change per player across all games
+    @Query("SELECT mp.player.playerId, SUM(mp.ratingChange) FROM MatchPlayer mp " +
+            "GROUP BY mp.player.playerId")
+    List<Object[]> totalRatingChangePerPlayer();
+
+    // Total rating change per player within a date range (weekly)
+    @Query("SELECT mp.player.playerId, SUM(mp.ratingChange) FROM MatchPlayer mp " +
+            "JOIN mp.match m WHERE m.startedAt BETWEEN :from AND :to " +
+            "GROUP BY mp.player.playerId")
+    List<Object[]> totalRatingChangePerPlayerInRange(@Param("from") Long from, @Param("to") Long to);
+
+    // Wins per hero per player — for best hero by wins calculation
+    @Query("SELECT mp.player.playerId, mp.heroName, COUNT(mp) as wins " +
+            "FROM MatchPlayer mp JOIN mp.match m " +
+            "WHERE m.status = 1 AND mp.playerStatus = 1 " +
+            "GROUP BY mp.player.playerId, mp.heroName " +
+            "ORDER BY wins DESC")
+    List<Object[]> heroWinsPerPlayer();
+
     /**
      * Wins per player overall.
      * Only status = 1 counts as a win. Abandoned never wins.
