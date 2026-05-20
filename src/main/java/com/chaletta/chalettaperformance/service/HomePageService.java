@@ -59,17 +59,13 @@ public class HomePageService {
             // ── Top player's best hero by WINS ────────────────────────
             String topPlayerBestHero = "—";
             if (topPlayerDto != null) {
-                topPlayerBestHero = matchPlayerRepository
-                        .heroWinsPerPlayer()
-                        .stream()
-                        .filter(r -> topPlayerDto.getPlayerId().equals((Long) r[0]))
-                        .findFirst()
-                        .map(r -> (String) r[1])
-                        .orElseGet(() -> topPlayerDto.getBestHeroByWins() != null
-                                ? topPlayerDto.getBestHeroByWins()
-                                : topPlayerDto.getMostPlayedHero() != null
-                                ? topPlayerDto.getMostPlayedHero()
-                                : "—");
+                String byWins = topPlayerDto.getBestHeroByWins();
+                String byPlayed = topPlayerDto.getMostPlayedHero();
+                topPlayerBestHero = (byWins != null && !byWins.equals("—"))
+                        ? byWins
+                        : (byPlayed != null && !byPlayed.equals("—"))
+                        ? byPlayed
+                        : "—";
             }
 
             // ── Summary DTO — order must match OverallSummaryDto fields ──
