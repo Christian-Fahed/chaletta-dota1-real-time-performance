@@ -1,7 +1,9 @@
 package com.chaletta.chalettaperformance.service.external;
 
 import com.chaletta.chalettaperformance.model.Match;
+import com.chaletta.chalettaperformance.model.MatchPlayer;
 import com.chaletta.chalettaperformance.model.Player;
+import com.chaletta.chalettaperformance.repository.MatchPlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,6 +12,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.time.Year;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,10 +24,11 @@ public class GameSyncService {
 
     private static final int MIN_DURATION_SECONDS = 1200; // 20 minutes
 
-    private final ExternalApiClient              apiClient;
-    private final MatchIngestionService          matchIngestionService;
-    private final PlayerIngestionService         playerIngestionService;
-    private final MatchPlayerIngestionService    matchPlayerIngestionService;
+    private final ExternalApiClient           apiClient;
+    private final MatchIngestionService       matchIngestionService;
+    private final PlayerIngestionService      playerIngestionService;
+    private final MatchPlayerIngestionService matchPlayerIngestionService;
+    private final MatchPlayerRepository       matchPlayerRepository;
 
     /**
      * Sync games with the RGC API.
@@ -113,6 +120,9 @@ public class GameSyncService {
 
                         matchPlayerIngestionService.createMatchPlayer(match, player, playerNode);
                     });
+
+                    // Fix any zero ratingChanges using team context
+                    fixZeroRatingChanges(match);
                 }
 
                 if (currentPage >= totalPages) {
@@ -125,6 +135,94 @@ public class GameSyncService {
 
         } catch (Exception e) {
             log.error("Sync failed: {}", e.getMessage());
+        }
+    }
+
+    // ─── Rating Change Fix ────────────────────────────────────────────────────
+
+    /**
+     * Two-level fix for missing ratingChanges caused by API inconsistencies:
+     *
+     * Level 1 — Some players on a team have ratingChange = 0, teammates don't:
+     *   → Apply the teammates' consistent value to the zero players.
+     *
+     * Level 2 — ALL players on a team have ratingChange = 0:
+     *   → Check the OTHER team's ratingChange.
+     *   → Other team got +5 (won) → we lost → apply -3 to entire team.
+     *   → Other team got -3 (lost) → we won → apply +5 to entire team.
+     */
+    private void fixZeroRatingChanges(Match match) {
+        List<MatchPlayer> allPlayers = matchPlayerRepository.findByMatch_GameId(match.getGameId());
+
+        // Group players by team number (0 = sentinel, 1 = scourge)
+        Map<Integer, List<MatchPlayer>> byTeam = allPlayers.stream()
+                .filter(mp -> mp.getTeamNumber() != null)
+                .collect(Collectors.groupingBy(MatchPlayer::getTeamNumber));
+
+        if (byTeam.size() != 2) {
+            log.debug("Game {} does not have exactly 2 teams, skipping fix.", match.getGameId());
+            return;
+        }
+
+        List<Integer> keys  = new ArrayList<>(byTeam.keySet());
+        List<MatchPlayer> teamA = byTeam.get(keys.get(0));
+        List<MatchPlayer> teamB = byTeam.get(keys.get(1));
+
+        fixTeam(match, teamA, teamB);
+        fixTeam(match, teamB, teamA);
+    }
+
+    private void fixTeam(Match match, List<MatchPlayer> team, List<MatchPlayer> otherTeam) {
+        List<MatchPlayer> zeroPlayers = team.stream()
+                .filter(mp -> mp.getRatingChange() != null && mp.getRatingChange() == 0)
+                .collect(Collectors.toList());
+
+        if (zeroPlayers.isEmpty()) return;
+
+        // ── Level 1: some teammates have a consistent non-zero value ──────────
+        List<Integer> nonZeroTeamRatings = team.stream()
+                .filter(mp -> mp.getRatingChange() != null && mp.getRatingChange() != 0)
+                .map(MatchPlayer::getRatingChange)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (nonZeroTeamRatings.size() == 1) {
+            applyRatingChange(zeroPlayers, nonZeroTeamRatings.get(0), match.getGameId());
+            return;
+        }
+
+        // ── Level 2: entire team is 0 — infer from the other team ────────────
+        boolean allZero = team.stream()
+                .allMatch(mp -> mp.getRatingChange() != null && mp.getRatingChange() == 0);
+
+        if (!allZero) {
+            log.debug("Game {} team has mixed ratingChanges, cannot safely fix.", match.getGameId());
+            return;
+        }
+
+        List<Integer> otherNonZeroRatings = otherTeam.stream()
+                .filter(mp -> mp.getRatingChange() != null && mp.getRatingChange() != 0)
+                .map(MatchPlayer::getRatingChange)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (otherNonZeroRatings.size() == 1) {
+            int otherRating = otherNonZeroRatings.get(0);
+            // Other team won (+5) → we lost (-3), and vice versa
+            int ourRating = otherRating > 0 ? -3 : 5;
+            applyRatingChange(team, ourRating, match.getGameId()); // ← entire team
+        } else {
+            log.debug("Game {} other team has mixed or all-zero ratingChanges, cannot infer result.",
+                    match.getGameId());
+        }
+    }
+
+    private void applyRatingChange(List<MatchPlayer> players, int ratingChange, Long gameId) {
+        log.info("Fixing ratingChange → {} for {} player(s) in game {}",
+                ratingChange, players.size(), gameId);
+        for (MatchPlayer mp : players) {
+            mp.setRatingChange(ratingChange);
+            matchPlayerRepository.save(mp);
         }
     }
 }
